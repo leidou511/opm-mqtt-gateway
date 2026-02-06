@@ -213,7 +213,6 @@ func (c *Client) Publish(mqttMsg *models.MQTTMessage) error {
 		return err
 	}
 
-	// 🔥 核心替代：v1.5.1无SetCallback，用「独立协程+tk.Wait()」实现异步非阻塞
 	// 闭包携带设备ID/主题/QoS，保证日志信息完整，不阻塞串口数据采集协程
 	go func(deviceID, topic string, qos byte) {
 		// 等待发布结果（同步，仅在协程内阻塞，不影响主流程）
