@@ -2,6 +2,34 @@
 
 基于OPM-1560B尿液分析仪的技术文档
 
+# Project Structure
+opm-mqtt-gateway/
+├── Dockerfile          # 容器化部署配置
+├── Makefile            # 自动化构建脚本
+├── README.md           # 项目说明文档
+├── go.mod/go.sum       # Go模块依赖
+├── configs/            # 配置文件目录
+│   └── config.yaml     # 全局配置文件
+├── cmd/                # 程序入口
+│   ├── main.go         # 项目主入口
+│   ├── data/           # 临时数据目录
+│   └── ports/          # 端口映射目录
+├── internal/           # 项目私有核心模块（Go规范）
+│   ├── config/         # 配置解析模块
+│   │   └── config.go
+│   ├── models/         # 数据模型模块
+│   │   └── models.go
+│   ├── mqtt/           # MQTT客户端模块
+│   │   └── mqtt.go
+│   ├── parser/         # OPM-1560B协议解析模块
+│   │   └── parser.go
+│   └── serial/         # 串口通信模块
+│       └── reader.go   # 你项目实际的串口读取文件
+├── logs/               # 日志目录
+├── test/               # 测试目录
+│   └── test_data.txt   # 测试数据
+└── .idea/              # IDE配置目录
+
 ## Getting started
 
 To make it easy for you to get started with GitLab, here's a list of recommended next steps.
