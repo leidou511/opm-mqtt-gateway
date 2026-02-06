@@ -1,0 +1,23 @@
+app:
+  name: "opm1560b-mqtt-gateway"
+  version: "1.0.0"
+
+serial:
+  port: "COM1"        # 根据实际设备调整
+  baud_rate: 9600
+  data_bits: 8
+  stop_bits: 1
+  parity: "O"        # 奇校验
+
+mqtt:
+  broker: "tcp://124.70.81.103:1883"
+  client_id: "opm1560b-mqtt-001"
+  username: "admin"
+  password: "8SfPtX184y2yVhBg"
+  topic: "medical/opm1560b/report"
+  qos: 1
+  retain: false
+
+logging:
+  level: "info"
+  file_path: "./logs/app.log"

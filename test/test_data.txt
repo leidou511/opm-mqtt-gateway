@@ -1,0 +1,36 @@
+# OPM-1560B 测试数据格式示例
+# 日期行
+2026-02-03
+# 时间行
+10:15:30
+# 样本号
+001
+# 空行
+
+# 测试项目数据（项目名称\t测试结果）
+GLU	Negative
+BIL	Negative
+SG	1.015
+PH	6.0
+KET	Negative
+BLD	Negative
+PRO	Negative
+URO	Normal
+NIT	Negative
+LEU	Negative
+
+# 异常样本示例
+2026-02-03
+10:20:05
+002
+
+GLU	*250 mg/dL
+BIL	*+
+SG	1.030
+PH	*8.5
+KET	*+++
+BLD	*+
+PRO	*150 mg/dL
+URO	Normal
+NIT	Negative
+LEU	*++
