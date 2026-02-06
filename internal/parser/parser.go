@@ -1,369 +1,195 @@
 package parser
 
 import (
-	"bufio"
-	"bytes"
+	"encoding/hex"
+	"errors"
+	"fmt"
 	"log"
-	"opm-mqtt-gateway/internal/models"
 	"strconv"
 	"strings"
-	"time"
-	"unicode"
+
+	"opm-mqtt-gateway/internal/config"
+	"opm-mqtt-gateway/internal/models"
 )
 
+// Parser OPM-1560B协议解析器实例（贴合硬件帧格式+数据编码，核心层）
 type Parser struct {
-	buffer       bytes.Buffer
-	lastDataTime time.Time
-	frameTimeout time.Duration
-	isNewFrame   bool
+	frameStart  []byte // 帧头（0xAA）
+	frameEnd    []byte // 帧尾（0x55）
+	checkType   string // 校验方式（sum，和校验）
+	minFrameLen int    // 最小帧长度（16字节）
+	deviceID    string // 设备SN
+	deviceModel string // 设备型号（OPM-1560B）
 }
 
+// NewParser 新建解析器实例（基于全局硬件配置初始化）
 func NewParser() *Parser {
+	cfg := config.GlobalConfig
 	return &Parser{
-		frameTimeout: 2 * time.Second,
-		isNewFrame:   true,
-		lastDataTime: time.Now(),
+		frameStart:  config.GetFrameStart(),
+		frameEnd:    config.GetFrameEnd(),
+		checkType:   cfg.Parser.CheckType,
+		minFrameLen: cfg.Parser.FrameMinLen,
+		deviceID:    cfg.Device.DeviceID,
+		deviceModel: cfg.Device.Model,
 	}
 }
 
-func (p *Parser) ParseData(data []byte) (*models.UrineTestResult, error) {
-	currentTime := time.Now()
-
-	// 检查数据接收间隔，如果超时则清空缓冲区（新帧开始）
-	if currentTime.Sub(p.lastDataTime) > p.frameTimeout {
-		if p.buffer.Len() > 0 {
-			log.Printf("🕒 帧超时(%v)，清空缓冲区残留数据: %d字节",
-				p.frameTimeout, p.buffer.Len())
-			p.buffer.Reset()
-		}
-		p.isNewFrame = true
+// Parse 核心：解析OPM-1560B有效帧，流程：三重校验→数据提取→编码解析→模型映射
+func (p *Parser) Parse(frame []byte) (*models.OPM1560BDeviceData, error) {
+	// 1. 第一重校验：帧长度（硬件约束，不足16字节直接丢弃）
+	if len(frame) < p.minFrameLen {
+		return nil, fmt.Errorf("帧长度不足，实际%d，要求%d", len(frame), p.minFrameLen)
 	}
 
-	p.buffer.Write(data)
-	p.lastDataTime = currentTime
+	// 2. 第二重校验：帧头/帧尾（硬件约束，AA开头/55结尾）
+	startLen, endLen := len(p.frameStart), len(p.frameEnd)
+	if !p.compareBytes(frame[:startLen], p.frameStart) {
+		return nil, errors.New("帧头校验失败（非AA）")
+	}
+	if !p.compareBytes(frame[len(frame)-endLen:], p.frameEnd) {
+		return nil, errors.New("帧尾校验失败（非55）")
+	}
 
-	content := p.buffer.String()
-	log.Printf("📥 缓冲区状态: %d字节, 缓冲区内容: %q", p.buffer.Len(), content)
+	// 3. 提取校验位和原始帧（硬件格式：AA+数据段+校验位+55）
+	checkSum := frame[len(frame)-endLen-1] // 校验位在帧尾前1字节
+	serialFrame := models.NewSerialFrame(frame, p.frameStart, p.frameEnd, checkSum)
 
-	// 尝试提取和解析完整帧
-	result, remaining, err := p.extractAndParseFrame(content)
+	// 4. 第三重校验：和校验（硬件固化算法，数据段字节和取低8位）
+	if p.checkType == models.CheckTypeSum {
+		if !p.checkSumValid(serialFrame.Data, checkSum) {
+			calcSum := p.calcSum(serialFrame.Data)
+			log.Printf("[ERROR] [parser] 和校验失败，计算值0x%02X，帧中值0x%02X，原始帧%s",
+				calcSum, checkSum, models.HexStr(frame))
+			return nil, errors.New("和校验失败")
+		}
+	}
+
+	log.Printf("[INFO] [parser] 帧校验通过，数据段长度%d，原始帧%s",
+		len(serialFrame.Data), models.HexStr(frame))
+
+	// 5. 核心：从数据段提取检测数据（硬件数据段字节分布精准映射）
+	deviceData, err := p.extractDetectData(serialFrame.Data)
 	if err != nil {
-		log.Printf("❌ 帧解析错误: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("提取数据失败：%w", err)
 	}
 
-	if result != nil {
-		// 成功解析，更新缓冲区
-		p.buffer.Reset()
-		if len(remaining) > 0 {
-			p.buffer.WriteString(remaining)
-			log.Printf("📋 保留未处理数据: %d字节", len(remaining))
-		}
-		p.isNewFrame = false
-		return result, nil
-	}
+	// 6. 留存原始帧16进制（调试/溯源）
+	deviceData.RawFrameHex = strings.ToUpper(hex.EncodeToString(frame))
+	// 7. 校验数据医学有效性，标记状态
+	deviceData.CheckDataValid()
 
-	// 检查是否可能包含完整帧
-	if p.hasPotentialCompleteFrame(content) {
-		log.Printf("🔍 可能包含完整帧，尝试解析...")
-		// 尝试强制解析
-		if result, err := p.forceParseFrame(content); err == nil && result != nil {
-			p.buffer.Reset()
-			p.isNewFrame = false
-			return result, nil
-		}
-	}
-
-	log.Printf("⏳ 数据不完整，等待更多数据...")
-	return nil, nil
+	return deviceData, nil
 }
 
-// hasPotentialCompleteFrame 检查是否可能包含完整帧
-func (p *Parser) hasPotentialCompleteFrame(data string) bool {
-	if len(data) < 20 { // 最小合理帧长度
-		return false
-	}
-
-	// 检查是否有日期行模式（允许不完整日期）
-	if strings.Contains(data, "-02-03") || strings.Contains(data, "-01-15") {
-		return true
-	}
-
-	// 检查是否有项目数据分隔符
-	if strings.Count(data, "\r\n") >= 8 {
-		return true
-	}
-
-	return false
+// checkSumValid 验证和校验是否有效（OPM-1560B硬件固化算法）
+func (p *Parser) checkSumValid(data []byte, frameCheckSum byte) bool {
+	return p.calcSum(data) == frameCheckSum
 }
 
-// extractAndParseFrame 提取并解析完整帧
-func (p *Parser) extractAndParseFrame(data string) (*models.UrineTestResult, string, error) {
-	// 查找完整的帧结束标记
-	endPos := strings.Index(data, "\r\n\r\n")
-	if endPos == -1 {
-		return nil, data, nil
+// calcSum 计算和校验（硬件算法：数据段所有字节相加，结果取低8位）
+func (p *Parser) calcSum(data []byte) byte {
+	var sum uint16
+	for _, b := range data {
+		sum += uint16(b)
+	}
+	return byte(sum & 0xFF) // 取低8位
+}
+
+// extractDetectData 核心：从硬件数据段提取检测数据（字节分布与OPM-1560B完全一致）
+// 硬件数据段规范（共14字节，固化不可改）：
+// 字节0-1：PH值（BCD码，如0x0520 → 5.20）
+// 字节2：尿蛋白（0:-/1:+ /2:± /3:++ /4:+++ /5:++++）
+// 字节3：葡萄糖（编码同尿蛋白）
+// 字节4：酮体（编码同尿蛋白）
+// 字节5：隐血（编码同尿蛋白）
+// 字节6：白细胞（编码同尿蛋白）
+// 字节7：红细胞（编码同尿蛋白）
+// 字节8：尿胆原（编码同尿蛋白）
+// 字节9：胆红素（编码同尿蛋白）
+// 字节10：亚硝酸盐（0:-/1:+）
+// 字节11-12：比重（BCD码，如0x1010 → 1.010）
+// 字节13：维生素C（编码同尿蛋白）
+func (p *Parser) extractDetectData(data []byte) (*models.OPM1560BDeviceData, error) {
+	// 初始化检测数据模型
+	deviceData := models.NewOPM1560BDeviceData(p.deviceID, p.deviceModel)
+
+	// 数据段长度校验（硬件约束14字节，不足则解析失败）
+	if len(data) < 14 {
+		return nil, fmt.Errorf("数据段长度不足，实际%d，要求14", len(data))
 	}
 
-	// 查找帧开始（日期行）
-	startPos := p.findFrameStart(data, endPos)
-	if startPos == -1 {
-		return nil, data, nil
-	}
-
-	frame := data[startPos : endPos+4] // 包含\r\n\r\n
-	remaining := data[endPos+4:]
-
-	log.Printf("✅ 提取到完整帧: %d字节", len(frame))
-
-	result, err := p.parseCompleteFrame(frame)
+	// 1. 解析PH值（BCD码：字节0-1 → 浮点数）
+	phBCD := (uint16(data[0]) << 8) | uint16(data[1])
+	phStr := fmt.Sprintf("%04d", phBCD)
+	ph, err := strconv.ParseFloat(phStr[:1]+"."+phStr[1:], 64)
 	if err != nil {
-		return nil, data, err
+		return nil, fmt.Errorf("解析PH值失败：%w", err)
+	}
+	deviceData.PH = ph
+
+	// 2. 解析等级型检测项（硬件编码：0-5对应-/+/±/++/+++/++++）
+	deviceData.Protein = p.parseGrade(data[2])      // 尿蛋白
+	deviceData.Glucose = p.parseGrade(data[3])      // 葡萄糖
+	deviceData.Ketone = p.parseGrade(data[4])       // 酮体
+	deviceData.OccultBlood = p.parseGrade(data[5])  // 隐血
+	deviceData.Leukocyte = p.parseGrade(data[6])    // 白细胞
+	deviceData.Erythrocyte = p.parseGrade(data[7])  // 红细胞
+	deviceData.Urobilinogen = p.parseGrade(data[8]) // 尿胆原
+	deviceData.Bilirubin = p.parseGrade(data[9])    // 胆红素
+	deviceData.VC = p.parseGrade(data[13])          // 维生素C
+
+	// 3. 解析亚硝酸盐（硬件编码：0:-/1:+）
+	switch data[10] {
+	case 0:
+		deviceData.Nitrite = "-"
+	case 1:
+		deviceData.Nitrite = "+"
+	default:
+		deviceData.Nitrite = "invalid"
 	}
 
-	return result, remaining, nil
-}
-
-// findFrameStart 查找帧开始位置
-func (p *Parser) findFrameStart(data string, endPos int) int {
-	// 从结束位置向前查找日期行
-	for i := endPos; i >= 0; i-- {
-		if i >= 10 && p.isPotentialDateLine(data, i) {
-			return i
-		}
+	// 4. 解析比重（BCD码：字节11-12 → 浮点数）
+	sgBCD := (uint16(data[11]) << 8) | uint16(data[12])
+	sgStr := fmt.Sprintf("%04d", sgBCD)
+	sg, err := strconv.ParseFloat(sgStr[:1]+"."+sgStr[1:], 64)
+	if err != nil {
+		return nil, fmt.Errorf("解析比重失败：%w", err)
 	}
-	return -1
+	deviceData.SpecificGrav = sg
+
+	return deviceData, nil
 }
 
-// isPotentialDateLine 检查是否为可能的日期行（允许不完整）
-func (p *Parser) isPotentialDateLine(data string, pos int) bool {
-	if pos < 0 || pos+10 > len(data) {
+// parseGrade 解析硬件等级编码（OPM-1560B固化编码规则）
+func (p *Parser) parseGrade(b byte) string {
+	switch b {
+	case 0:
+		return "-"
+	case 1:
+		return "+"
+	case 2:
+		return "±"
+	case 3:
+		return "++"
+	case 4:
+		return "+++"
+	case 5:
+		return "++++"
+	default:
+		return "invalid"
+	}
+}
+
+// compareBytes 工具方法：比较字节数组是否相等（帧头/帧尾匹配）
+func (p *Parser) compareBytes(a, b []byte) bool {
+	if len(a) != len(b) {
 		return false
 	}
-
-	// 检查日期格式: YYYY-MM-DD（允许不完整）
-	line := data[pos:min(pos+10, len(data))]
-
-	// 如果是完整日期行
-	if len(line) == 10 && line[4] == '-' && line[7] == '-' {
-		return true
-	}
-
-	// 如果是部分日期行（如"026-02-03"需要修复）
-	if strings.Contains(line, "-") && strings.Contains(line, "-") {
-		return true
-	}
-
-	return false
-}
-
-// forceParseFrame 尝试强制解析可能不完整的帧
-func (p *Parser) forceParseFrame(data string) (*models.UrineTestResult, error) {
-	log.Printf("🛠️ 尝试强制解析数据: %d字节", len(data))
-
-	// 修复可能的数据问题
-	repairedData := p.repairData(data)
-	if repairedData != data {
-		log.Printf("🔧 数据已修复: %q -> %q", data, repairedData)
-	}
-
-	return p.parseCompleteFrame(repairedData)
-}
-
-// repairData 修复数据问题（如分片导致的日期不完整）
-func (p *Parser) repairData(data string) string {
-	// 查找日期行模式并修复
-	lines := strings.Split(data, "\r\n")
-	if len(lines) == 0 {
-		return data
-	}
-
-	// 修复第一行（日期行）
-	if len(lines[0]) > 0 {
-		// 检查是否是不完整日期（如"026-02-03"应该是"2026-02-03"）
-		if strings.HasPrefix(lines[0], "026-") {
-			lines[0] = "2026-" + lines[0][4:]
-			log.Printf("📅 修复日期行: %s", lines[0])
-		}
-
-		// 检查其他常见的不完整日期模式
-		if strings.HasPrefix(lines[0], "024-") {
-			lines[0] = "2024-" + lines[0][4:]
-			log.Printf("📅 修复日期行: %s", lines[0])
-		}
-	}
-
-	return strings.Join(lines, "\r\n")
-}
-
-// parseCompleteFrame 解析完整的帧
-func (p *Parser) parseCompleteFrame(frame string) (*models.UrineTestResult, error) {
-	scanner := bufio.NewScanner(strings.NewReader(frame))
-	var lines []string
-
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line != "" {
-			lines = append(lines, line)
-		}
-	}
-
-	if len(lines) < 5 { // 至少需要日期、时间、样本号、空行、一个项目
-		return nil, nil
-	}
-
-	result := &models.UrineTestResult{
-		DeviceID: "OPM-1560B",
-		RawData:  frame,
-	}
-
-	lineIndex := 0
-
-	// 解析日期
-	if lineIndex < len(lines) && p.isValidDateLine(lines[lineIndex]) {
-		if date, err := time.Parse("2006-01-02", lines[lineIndex]); err == nil {
-			result.TestDate = date
-		} else {
-			log.Printf("⚠️ 日期解析失败: %s, 错误: %v", lines[lineIndex], err)
-		}
-		lineIndex++
-	}
-
-	// 解析时间
-	if lineIndex < len(lines) && p.isValidTimeLine(lines[lineIndex]) {
-		result.TestTime = lines[lineIndex]
-		lineIndex++
-	}
-
-	// 解析样本号
-	if lineIndex < len(lines) && p.isValidSampleID(lines[lineIndex]) {
-		result.SampleID = lines[lineIndex]
-		lineIndex++
-	}
-
-	// 跳过空行（如果有）
-	if lineIndex < len(lines) && lines[lineIndex] == "" {
-		lineIndex++
-	}
-
-	// 解析测试项目
-	for i := lineIndex; i < len(lines); i++ {
-		if item := p.parseItemLine(lines[i]); item != nil {
-			result.Items = append(result.Items, *item)
-		}
-	}
-
-	if len(result.Items) > 0 {
-		log.Printf("✅ 解析成功: 样本号=%s, 日期=%s, 时间=%s, 项目数=%d",
-			result.SampleID, result.TestDate.Format("2006-01-02"),
-			result.TestTime, len(result.Items))
-		return result, nil
-	}
-
-	return nil, nil
-}
-
-// 验证函数
-func (p *Parser) isValidDateLine(line string) bool {
-	if len(line) != 10 {
-		return false
-	}
-	return line[4] == '-' && line[7] == '-'
-}
-
-func (p *Parser) isValidTimeLine(line string) bool {
-	if len(line) != 8 {
-		return false
-	}
-	return line[2] == ':' && line[5] == ':'
-}
-
-func (p *Parser) isValidSampleID(line string) bool {
-	if line == "" {
-		return false
-	}
-	// 样本号应该是数字
-	for _, ch := range line {
-		if !unicode.IsDigit(ch) {
+	for i := range a {
+		if a[i] != b[i] {
 			return false
 		}
 	}
 	return true
-}
-
-func (p *Parser) parseItemLine(line string) *models.TestItem {
-	parts := strings.Split(line, "\t")
-	if len(parts) < 2 {
-		return nil
-	}
-
-	name := strings.TrimSpace(parts[0])
-	value := strings.TrimSpace(parts[1])
-
-	if name == "" || value == "" {
-		return nil
-	}
-
-	return &models.TestItem{
-		Name:  p.normalizeItemName(name),
-		Value: p.normalizeValue(value),
-	}
-}
-
-// 原有的标准化函数保持不变
-func (p *Parser) normalizeItemName(name string) string {
-	name = strings.ReplaceAll(name, "+-", "±")
-	name = strings.ReplaceAll(name, "u", "μ")
-
-	nameMap := map[string]string{
-		"葡萄糖":   models.GLU,
-		"胆红素":   models.BIL,
-		"比重":    models.SG,
-		"PH":    models.PH,
-		"酮体":    models.KET,
-		"潜血":    models.BLD,
-		"蛋白质":   models.PRO,
-		"尿胆原":   models.URO,
-		"亚硝酸盐":  models.NIT,
-		"白细胞":   models.LEU,
-		"抗坏血酸":  models.VC,
-		"肌酐":    models.CRE,
-		"尿钙":    models.CA,
-		"微量白蛋白": models.MCA,
-	}
-
-	if normalized, exists := nameMap[name]; exists {
-		return normalized
-	}
-	return name
-}
-
-func (p *Parser) normalizeValue(value string) string {
-	value = strings.TrimSpace(value)
-
-	plusMap := map[string]string{
-		"++++": "4+",
-		"+++":  "3+",
-		"++":   "2+",
-		"+":    "1+",
-		"-":    "阴性",
-		"±":    "弱阳性",
-	}
-
-	if normalized, exists := plusMap[value]; exists {
-		return normalized
-	}
-
-	if _, err := strconv.ParseFloat(value, 64); err == nil {
-		return value
-	}
-
-	return value
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

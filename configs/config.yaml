@@ -2,22 +2,37 @@ app:
   name: "opm1560b-mqtt-gateway"
   version: "1.0.0"
 
+device:
+  device_id: "SN12345678"  # 设备唯一编号，必填（使用设备出厂SN）
+  model: "OPM-1560B"       # 设备型号，固定为OPM-1560B
+
 serial:
-  port: "COM1"        # 根据实际设备调整
+  port: "COM1"             # 根据实际设备调整
   baud_rate: 9600
   data_bits: 8
   stop_bits: 1
-  parity: "O"        # 奇校验
+  parity: "O"              # 奇校验
+  timeout: 3               # 串口读写超时，单位秒
+  retry_cnt: 3             # 串口打开重试次数
+  retry_interval: 2        # 串口重试间隔，单位秒
 
 mqtt:
   broker: "tcp://124.70.81.103:1883"
   client_id: "opm1560b-mqtt-001"
   username: "admin"
   password: "8SfPtX184y2yVhBg"
-  topic: "medical/opm1560b/report"
-  qos: 1
-  retain: false
+  topic_prefix: "opm1560b"        # MQTT发布主题前缀，最终主题：前缀/device_id/data/state
+  qos: 1                          # MQTT QoS级别，推荐1（保证至少送达）
+  keep_alive: 30                  # MQTT保活时间，单位秒
+  reconnect_interval: 2           # MQTT重连基础间隔，单位秒
 
-logging:
-  level: "info"
-  file_path: "./logs/app.log"
+log:
+  path: "logs/app.log"    # 日志文件路径
+  level: "INFO"           # 日志级别：INFO/WARN/ERROR/FATAL
+
+parser:
+  frame_start: "AA"       # 帧头，16进制字符串，OPM-1560B固定AA
+  frame_end: "55"         # 帧尾，16进制字符串，OPM-1560B固定55
+  check_type: "sum"       # 校验方式，OPM-1560B固定sum（和校验）
+  frame_min_len: 16       # 最小帧长度，单位字节，OPM-1560B固定16
+
