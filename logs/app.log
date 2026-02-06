@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 2026/02/06 15:57:16 reader.go:54: 串口配置: 波特率=9600, 数据位=8, 停止位=0, 校验位=1
 2026/02/06 15:57:16 reader.go:78: [INFO] [serial] 串口初始化成功，设备：COM1，波特率：9600
 2026/02/06 15:57:16 client.go:55: [INFO] [mqtt] 连接成功，服务端：tcp://124.70.81.103:1883，客户端ID：opm1560b-mqtt-001
@@ -7,3 +8,52 @@
 2026/02/06 16:00:03 main.go:106: [INFO] [main] 接收到退出信号，开始优雅关闭...
 2026/02/06 16:00:08 reader.go:287: [INFO] [serial] 串口已关闭：COM1
 2026/02/06 16:00:08 reader.go:106: [ERROR] [serial] 读数据失败：端口句柄未初始化，标记断开
+=======
+>>>>>>> 4acdbeade36d8864dc26877cab2d9cd38cac39d6
+2026/02/06 16:27:05 reader.go:54: 串口配置: 波特率=9600, 数据位=8, 停止位=0, 校验位=1
+2026/02/06 16:27:05 reader.go:78: [INFO] [serial] 串口初始化成功，设备：COM1，波特率：9600
+2026/02/06 16:27:05 main.go:62: [INFO] [main] 串口阅读器已启动，设备：SN12345678
+2026/02/06 16:27:05 client.go:55: [INFO] [mqtt] 连接成功，服务端：tcp://124.70.81.103:1883，客户端ID：opm1560b-mqtt-001
+2026/02/06 16:27:05 main.go:98: [INFO] [main] 数据处理协程已启动，全链路就绪
+2026/02/06 16:27:05 client.go:164: [INFO] [mqtt] 已上报设备在线状态，主题：opm1560b/SN12345678/state，消息：{"device_id":"SN12345678","device_model":"OPM-1560B","msg_type":"state","content":"online","report_time":"2026-02-06T08:27:05Z","version":"v1.0"}
+2026/02/06 16:27:23 reader.go:232: [WARN] [serial] 无有效帧头，清空缓冲区
+2026/02/06 16:34:07 main.go:106: [INFO] [main] 接收到退出信号，开始优雅关闭...
+2026/02/06 16:34:12 reader.go:287: [INFO] [serial] 串口已关闭：COM1
+2026/02/06 16:34:12 reader.go:106: [ERROR] [serial] 读数据失败：端口句柄未初始化，标记断开
+2026/02/06 16:40:59 reader.go:54: 串口配置: 波特率=9600, 数据位=8, 停止位=0, 校验位=1
+2026/02/06 16:40:59 reader.go:78: [INFO] [serial] 串口初始化成功，设备：COM1，波特率：9600
+2026/02/06 16:40:59 main.go:62: [INFO] [main] 串口阅读器已启动，设备：SN12345678
+2026/02/06 16:40:59 main.go:98: [INFO] [main] 数据处理协程已启动，全链路就绪
+2026/02/06 16:40:59 client.go:55: [INFO] [mqtt] 连接成功，服务端：tcp://124.70.81.103:1883，客户端ID：opm1560b-mqtt-001
+2026/02/06 16:40:59 client.go:164: [INFO] [mqtt] 已上报设备在线状态，主题：opm1560b/SN12345678/state，消息：{"device_id":"SN12345678","device_model":"OPM-1560B","msg_type":"state","content":"online","report_time":"2026-02-06T08:40:59Z","version":"v1.0"}
+2026/02/06 16:41:08 reader.go:259: [INFO] [serial] 提取有效帧，长度：16，原始16进制：qgUgAQAAAAAAAAAQEAApVQ==
+2026/02/06 16:41:08 parser.go:62: [ERROR] [parser] 和校验失败，计算值0x46，帧中值0x29，原始帧qgUgAQAAAAAAAAAQEAApVQ==
+2026/02/06 16:41:08 main.go:76: [ERROR] [main] 解析帧失败：和校验失败，帧：qgUgAQAAAAAAAAAQEAApVQ==
+2026/02/06 16:48:00 main.go:106: [INFO] [main] 接收到退出信号，开始优雅关闭...
+2026/02/06 16:48:02 reader.go:287: [INFO] [serial] 串口已关闭：COM1
+2026/02/06 16:48:02 reader.go:106: [ERROR] [serial] 读数据失败：端口句柄未初始化，标记断开
+2026/02/06 16:49:09 reader.go:54: 串口配置: 波特率=9600, 数据位=8, 停止位=0, 校验位=1
+2026/02/06 16:49:09 reader.go:78: [INFO] [serial] 串口初始化成功，设备：COM1，波特率：9600
+2026/02/06 16:49:09 main.go:62: [INFO] [main] 串口阅读器已启动，设备：SN12345678
+2026/02/06 16:49:09 main.go:98: [INFO] [main] 数据处理协程已启动，全链路就绪
+2026/02/06 16:49:09 client.go:55: [INFO] [mqtt] 连接成功，服务端：tcp://124.70.81.103:1883，客户端ID：opm1560b-mqtt-001
+2026/02/06 16:49:09 client.go:164: [INFO] [mqtt] 已上报设备在线状态，主题：opm1560b/SN12345678/state，消息：{"device_id":"SN12345678","device_model":"OPM-1560B","msg_type":"state","content":"online","report_time":"2026-02-06T08:49:09Z","version":"v1.0"}
+2026/02/06 16:49:14 reader.go:232: [WARN] [serial] 无有效帧头，清空缓冲区
+2026/02/06 16:57:51 reader.go:259: [INFO] [serial] 提取有效帧，长度：16，原始16进制：qgUgAQAAAAAAAAAQEAApVQ==
+2026/02/06 16:57:51 parser.go:62: [ERROR] [parser] 和校验失败，计算值0x46，帧中值0x29，原始帧qgUgAQAAAAAAAAAQEAApVQ==
+2026/02/06 16:57:51 main.go:76: [ERROR] [main] 解析帧失败：和校验失败，帧：qgUgAQAAAAAAAAAQEAApVQ==
+2026/02/06 17:01:53 main.go:106: [INFO] [main] 接收到退出信号，开始优雅关闭...
+2026/02/06 17:01:57 reader.go:287: [INFO] [serial] 串口已关闭：COM1
+2026/02/06 17:01:57 reader.go:106: [ERROR] [serial] 读数据失败：端口句柄未初始化，标记断开
+2026/02/06 17:04:48 reader.go:54: 串口配置: 波特率=9600, 数据位=8, 停止位=0, 校验位=1
+2026/02/06 17:04:48 reader.go:78: [INFO] [serial] 串口初始化成功，设备：COM1，波特率：9600
+2026/02/06 17:04:48 main.go:62: [INFO] [main] 串口阅读器已启动，设备：SN12345678
+2026/02/06 17:04:48 client.go:55: [INFO] [mqtt] 连接成功，服务端：tcp://124.70.81.103:1883，客户端ID：opm1560b-mqtt-001
+2026/02/06 17:04:48 main.go:98: [INFO] [main] 数据处理协程已启动，全链路就绪
+2026/02/06 17:04:49 client.go:164: [INFO] [mqtt] 已上报设备在线状态，主题：opm1560b/SN12345678/state，消息：{"device_id":"SN12345678","device_model":"OPM-1560B","msg_type":"state","content":"online","report_time":"2026-02-06T09:04:48Z","version":"v1.0"}
+2026/02/06 17:04:59 reader.go:259: [INFO] [serial] 提取有效帧，长度：16，原始16进制：aa052001000000000000001010002955
+2026/02/06 17:04:59 parser.go:62: [ERROR] [parser] 和校验失败，计算值0x46，帧中值0x29，原始帧qgUgAQAAAAAAAAAQEAApVQ==
+2026/02/06 17:04:59 main.go:76: [ERROR] [main] 解析帧失败：和校验失败，帧：qgUgAQAAAAAAAAAQEAApVQ==
+2026/02/06 17:06:46 main.go:106: [INFO] [main] 接收到退出信号，开始优雅关闭...
+2026/02/06 17:06:50 reader.go:287: [INFO] [serial] 串口已关闭：COM1
+2026/02/06 17:06:50 reader.go:106: [ERROR] [serial] 读数据失败：端口句柄未初始化，标记断开

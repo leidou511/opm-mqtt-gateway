@@ -59,8 +59,7 @@ func (p *Parser) Parse(frame []byte) (*models.OPM1560BDeviceData, error) {
 	if p.checkType == models.CheckTypeSum {
 		if !p.checkSumValid(serialFrame.Data, checkSum) {
 			calcSum := p.calcSum(serialFrame.Data)
-			log.Printf("[ERROR] [parser] 和校验失败，计算值0x%02X，帧中值0x%02X，原始帧%s",
-				calcSum, checkSum, models.HexStr(frame))
+			log.Printf("[ERROR] [parser] 和校验失败，计算值0x%02X，帧中值0x%02X，原始帧%s", calcSum, checkSum, models.HexStr(frame))
 			return nil, errors.New("和校验失败")
 		}
 	}

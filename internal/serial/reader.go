@@ -2,6 +2,7 @@ package serial
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
@@ -9,7 +10,6 @@ import (
 	"time"
 
 	"opm-mqtt-gateway/internal/config"
-	"opm-mqtt-gateway/internal/models"
 
 	"go.bug.st/serial"
 )
@@ -256,7 +256,7 @@ func (r *Reader) handleData(data []byte) {
 		// 4. 提取有效帧，发送到解析通道
 		validFrame := r.buffer[startIdx:endIdx]
 		r.frameChan <- validFrame
-		log.Printf("[INFO] [serial] 提取有效帧，长度：%d，原始16进制：%s", len(validFrame), models.HexStr(validFrame))
+		log.Printf("[INFO] [serial] 提取有效帧，长度：%d，原始16进制：%s", len(validFrame), hex.EncodeToString(validFrame))
 
 		// 5. 裁剪缓冲区：保留帧尾后的数据（粘包场景，下一次循环处理）
 		r.buffer = r.buffer[endIdx:]
