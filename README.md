@@ -2,7 +2,7 @@
 
 基于OPM-1560B尿液分析仪的技术文档
 
-# Project Structure
+## Project Structure
 opm-mqtt-gateway/
 ├── Dockerfile          # 容器化部署配置
 ├── Makefile            # 自动化构建脚本
@@ -43,7 +43,7 @@ Already a pro? Just edit this README.md and make it your own. Want to make it ea
 
 ```
 cd existing_repo
-git remote add origin http://47.95.151.192:3000/golang/opm-mqtt-gateway.git
+git remote add origin https://github.com/leidou511/opm-mqtt-gateway.git
 git branch -M main
 git push -uf origin main
 ```
